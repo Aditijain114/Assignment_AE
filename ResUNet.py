@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
 import os
 import random
 import numpy as np
@@ -19,19 +13,10 @@ from torchvision.models import resnet34, ResNet34_Weights
 import torch.cuda.amp as amp
 import matplotlib
 import matplotlib.pyplot as plt
-
-
 import torch.cuda.amp as amp
 
 import warnings
 warnings.filterwarnings("ignore")
-
-
-# In[2]:
-
-
-# In[3]:
-
 
 #channel attention block
 class ChannelAttention(nn.Module):
@@ -67,42 +52,6 @@ class SpatialAttention(nn.Module):
         x_out = self.conv(x_out)
         return self.sigmoid(x_out)
 
-#ASPP module
-class ASPP(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(ASPP, self).__init__()
-        
-        self.conv1 = nn.Conv2d(in_channels, out_channels//4, kernel_size=1)
-        self.conv2 = nn.Conv2d(in_channels, out_channels//4, kernel_size=3, padding=3, dilation=3)
-        self.conv3 = nn.Conv2d(in_channels, out_channels//4, kernel_size=3, padding=6, dilation=6)
-        self.conv4 = nn.Conv2d(in_channels, out_channels//4, kernel_size=3, padding=12, dilation=12)
-
-
-
-        self.bn1 = nn.BatchNorm2d(out_channels//4)
-        self.bn2 = nn.BatchNorm2d(out_channels//4)
-        self.bn3 = nn.BatchNorm2d(out_channels//4)
-        self.bn4 = nn.BatchNorm2d(out_channels//4)
-
-
-        self.conv_out = nn.Conv2d(out_channels, out_channels, kernel_size=1)
-        self.bn_out = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        x1 = self.relu(self.bn1(self.conv1(x)))
-        x2 = self.relu(self.bn2(self.conv2(x)))
-        x3 = self.relu(self.bn3(self.conv3(x)))
-        x4 = self.relu(self.bn4(self.conv4(x)))
-
-
-        x_out = torch.cat([x1, x2, x3, x4], dim=1)
-        x_out = self.relu(self.bn_out(self.conv_out(x_out)))
-        return x_out
-
-
-# In[4]:
-
 
 class DecoderBlock(nn.Module):
     def __init__(self, in_channels, skip_channels, out_channels):
@@ -137,10 +86,6 @@ class DecoderBlock(nn.Module):
         x = torch.cat([x, skip], dim=1)
         return self.conv(x)
 
-
-# In[5]:
-
-
 class ResUNet(nn.Module):
     def __init__(self, in_channels, num_classes, pretrained=True):
         super(ResUNet, self).__init__()
@@ -162,9 +107,6 @@ class ResUNet(nn.Module):
         self.encoder3 = resnet.layer3  # 256
         self.encoder4 = resnet.layer4  # 512
 
-        # Center
-        self.center = ASPP(512, 512)
-
         # Decoder
         self.decoder4 = DecoderBlock(512, 256, 256)
         self.decoder3 = DecoderBlock(256, 128, 128)
@@ -178,7 +120,7 @@ class ResUNet(nn.Module):
         self.dsv1 = nn.Conv2d(32, num_classes, kernel_size=1)
         self.final = nn.Conv2d(32, num_classes, kernel_size=1)
         
-        # Classification head (using features from encoder4)
+        # Classification head 
         self.classifier_head = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
@@ -186,13 +128,13 @@ class ResUNet(nn.Module):
             nn.Softmax(dim=1)
         )
 
-        # Router (using features from encoder4)
+        # Router 
         self.router = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
             nn.Linear(512, 128),
             nn.ReLU(),
-            nn.Linear(128, 2),  # Two tasks
+            nn.Linear(128, 2),
             nn.Softmax(dim=1)
         )
       
@@ -216,12 +158,8 @@ class ResUNet(nn.Module):
         x_skip4 = x  # 256 ch, 1/16
 
         x4 = self.encoder4(x)  # 512ch, 1/32
-
-
-        # Segmentation path
-        #x = self.center(x4)
-
-        # Get routing weights
+        
+        # routing weights
         routing_weights = self.router(x4)
         topk_val, topk_idx = torch.topk(routing_weights, k=1, dim=-1)  # [B, 1]
         
@@ -263,10 +201,10 @@ class ResUNet(nn.Module):
         segmentation_final = []
     
         for i in range(batch_size):
-            if topk_idx[i, 0] == 0:  # classification expert selected
+            if topk_idx[i, 0] == 0:  
                 classification_final.append(class_outputs[i].unsqueeze(0))
                 segmentation_final.append(None)
-            else:  # segmentation expert selected
+            else: 
                 classification_final.append(None)
                 segmentation_final.append([
                     p4[i].unsqueeze(0),
@@ -294,28 +232,7 @@ class ResUNet(nn.Module):
                 'only_classification': class_outputs
             }
 
-
-# In[6]:
-
-
-net = ResUNet(in_channels=3, num_classes=5, pretrained=True)
-
-
-# In[7]:
-
-
+#net = ResUNet(in_channels=3, num_classes=5, pretrained=True)
 #from torchsummary import summary
-
-
-# In[8]:
-
-
 #net.to('cuda' if torch.cuda.is_available() else 'cpu') 
 #summary(net, input_size=(3, 224, 224))
-
-
-# In[ ]:
-
-
-
-
