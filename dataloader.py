@@ -94,9 +94,3 @@ class IDRiD_Dataset(Dataset):
             mask = torch.stack([self.mask_transform(m).squeeze() for m in mask_pil]).float()  # (5, H, W)
 
         return image, torch.tensor(label).long(), mask
-
-# In[ ]:
-
-
-
-
